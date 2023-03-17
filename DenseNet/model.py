@@ -78,10 +78,14 @@ class Transition(nn.Module):
 
 '''
 Growth Rate: concat 을 위해서 각 layer의 output이 똑같은 channel로 해주는 것이 좋은데, 이 channel의 수를 Growth Rate
+
 Composite Function: H_l() 으로 표현되고, BN-ReLU-Conv3x3 으로 이뤄짐
+
 Bottlenect layers: 1x1 conv 를 사용해서 channel을 줄이고, 이후에 보통 학습을 위한 3x3 conv를 사용해서 weight를 줄임,
                    BN-ReLU-1x1conv-BN-ReLU-3x3conv 로 이뤄짐
+
 Transition layers (Pooling layer): block이 끝난 후에 pooling layer를 사용해서 feature의 weight를 줄임
+
 Compression: pooling layer의 1x1conv에서 channel을 줄여주는 비율
 '''
 

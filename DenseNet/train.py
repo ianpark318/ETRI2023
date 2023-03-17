@@ -101,4 +101,4 @@ def main():
     if args.cuda:
         net = net.cuda()
 
-    if args.opt == 'sgd':
+    # if args.opt == 'sgd':

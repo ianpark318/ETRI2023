@@ -1,1 +1,7 @@
 data/
+pytorch_wavelets/
+.ipynb_checkpoints/
+.idea/
+Convert_RP.py
+nohup.out
+requirements.txt

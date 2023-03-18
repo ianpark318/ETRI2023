@@ -6,14 +6,17 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+# import torchvision.datasets as dset
+# import torchvision.transforms as transforms
+# from torch.utils.data import DataLoader
 
-import torchvision.models as models
+# import torchvision.models as models
 
 import sys
 import math
+
+import torchsummary
+
 
 class Bottleneck(nn.Module):
     def __init__(self, nChannels, growthRate):
@@ -119,7 +122,6 @@ class DensNet(nn.Module):
         if bottleneck:
             nDenseBlocks //= 2
 
-
         ## before Dense
         nChannels = 2*growthRate
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=nChannels, kernel_size=3, padding=1, bias=False)
@@ -166,8 +168,13 @@ class DensNet(nn.Module):
         x = self.dense3(x)
 
         x = self.relu(self.bn1(x))
+
+
         x = F.avg_pool2d(x, 8)
         x = torch.squeeze(x)
-        x = F.lob_softmax(self.fc(x))
+        x = F.log_softmax(self.fc(x))
 
         return x
+
+net = DensNet(growthRate=12, depth=100, reduction=0.5, nClasses=10, bottleneck=False)
+torchsummary.summary(net, (3, 244, 244))

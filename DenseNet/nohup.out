@@ -1,0 +1,36 @@
+[W 17:46:43.156 NotebookApp] Loading JupyterLab as a classic notebook (v6) extension.
+[I 2023-03-18 17:46:43.159 LabApp] JupyterLab extension loaded from /home/gang/anaconda3/envs/ETRI/lib/python3.9/site-packages/jupyterlab
+[I 2023-03-18 17:46:43.159 LabApp] JupyterLab application directory is /home/gang/anaconda3/envs/ETRI/share/jupyter/lab
+[I 17:46:43.657 NotebookApp] Serving notebooks from local directory: /home/gang/PycharmProjects/ETRI2023/DenseNet
+[I 17:46:43.657 NotebookApp] Jupyter Notebook 6.5.2 is running at:
+[I 17:46:43.657 NotebookApp] http://localhost:8888/?token=8de58d6dbb9ef42483c3bf0abfa00addf4ec324a4ce88ae9
+[I 17:46:43.657 NotebookApp]  or http://127.0.0.1:8888/?token=8de58d6dbb9ef42483c3bf0abfa00addf4ec324a4ce88ae9
+[I 17:46:43.657 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 17:46:43.671 NotebookApp] 
+    
+    To access the notebook, open this file in a browser:
+        file:///home/gang/.local/share/jupyter/runtime/nbserver-700899-open.html
+    Or copy and paste one of these URLs:
+        http://localhost:8888/?token=8de58d6dbb9ef42483c3bf0abfa00addf4ec324a4ce88ae9
+     or http://127.0.0.1:8888/?token=8de58d6dbb9ef42483c3bf0abfa00addf4ec324a4ce88ae9
+[W 17:58:26.467 NotebookApp] 404 DELETE /api/sessions/2bed0f83-9232-4276-a97e-50c3417bd41e (127.0.0.1): Session not found: session_id='2bed0f83-9232-4276-a97e-50c3417bd41e'
+[W 17:58:26.467 NotebookApp] Session not found: session_id='2bed0f83-9232-4276-a97e-50c3417bd41e'
+[W 17:58:26.467 NotebookApp] 404 DELETE /api/sessions/2bed0f83-9232-4276-a97e-50c3417bd41e (127.0.0.1) 0.910000ms referer=http://localhost:8888/notebooks/Untitled.ipynb?kernel_name=python3
+[I 17:58:26.495 NotebookApp] Kernel started: 675e92a9-6cb3-45e6-bc38-78f1aad2907c, name: python3
+[W 17:59:35.956 NotebookApp] 404 GET /api/contents/Untitled.ipynb?content=0&_=1679124335775 (127.0.0.1): file or directory does not exist: 'Untitled.ipynb'
+[W 17:59:35.956 NotebookApp] file or directory does not exist: 'Untitled.ipynb'
+[W 17:59:35.956 NotebookApp] 404 GET /api/contents/Untitled.ipynb?content=0&_=1679124335775 (127.0.0.1) 0.730000ms referer=http://localhost:8888/notebooks/Untitled.ipynb?kernel_name=python3
+[I 17:59:35.965 NotebookApp] Uploading file to /Untitled.ipynb
+/home/gang/anaconda3/envs/ETRI/lib/python3.9/site-packages/nbformat/__init__.py:128: MissingIDFieldWarning: Code cell is missing an id field, this will become a hard error in future nbformat versions. You may want to use `normalize()` on your notebooks before validations (available since nbformat 5.1.4). Previous versions of nbformat are fixing this issue transparently, and will stop doing so in the future.
+  validate(nb)
+/home/gang/anaconda3/envs/ETRI/lib/python3.9/site-packages/notebook/services/contents/manager.py:353: MissingIDFieldWarning: Code cell is missing an id field, this will become a hard error in future nbformat versions. You may want to use `normalize()` on your notebooks before validations (available since nbformat 5.1.4). Previous versions of nbformat are fixing this issue transparently, and will stop doing so in the future.
+  validate_nb(model['content'])
+[I 18:00:38.589 NotebookApp] Saving file at /Untitled.ipynb
+[I 18:00:59.287 NotebookApp] Saving file at /Untitled.ipynb
+[I 18:01:00.487 NotebookApp] Saving file at /Untitled.ipynb
+[I 18:01:03.710 NotebookApp] Saving file at /Untitled.ipynb
+[I 18:01:04.819 NotebookApp] Starting buffering for 675e92a9-6cb3-45e6-bc38-78f1aad2907c:8e0f3a0ae39d498581ed51417dbe65ec
+[C 18:01:25.642 NotebookApp] received signal 15, stopping
+[I 18:01:25.642 NotebookApp] Shutting down 1 kernel
+[I 18:01:25.643 NotebookApp] Kernel shutdown: 675e92a9-6cb3-45e6-bc38-78f1aad2907c
+[I 18:01:25.855 NotebookApp] Shutting down 0 terminals

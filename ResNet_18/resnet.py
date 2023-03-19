@@ -45,20 +45,13 @@ class IdentityBlock(nn.Module):
 
     def forward(self, x):
         identity = x
-        print('input shape:', x.shape)
         out  = self.conv1(x)
-        print('output shape:', out.shape)
         out  = self.bn1(out)
-        print('output shape:', out.shape)
         out  = F.relu(out)
-        print('output shape:', out.shape)
         out  = self.conv2(out)
-        print('output shape:', out.shape)
         out  = self.bn2(out)
         out += identity
-        print('output shape:', out.shape)
         out  = F.relu(out)
-        print('output shape:', out.shape)
         return out
 
 

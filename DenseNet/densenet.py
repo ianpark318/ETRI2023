@@ -1,3 +1,5 @@
+from netrc import netrc
+
 import torch
 
 import torch.nn as nn
@@ -21,8 +23,8 @@ class conv3x3(nn.Module):
     def __init__(self, nChannels, nOutChannels):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=nChannels, out_channels=nOutChannels, kernel_size=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.conv1 = nn.Conv2d(in_channels=nChannels, out_channels=nOutChannels, kernel_size=3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(nOutChannels)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -37,7 +39,7 @@ class conv1x1(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(in_channels=nChannels, out_channels=nOutChannels, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(nChannels)
+        self.bn1 = nn.BatchNorm2d(nOutChannels)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -51,10 +53,10 @@ class Denseblock(nn.Module):
     def __init__(self, nChannels, nOutChannels):
         super().__init__()
 
-        self.conv1 = conv3x3(in_channels=nChannels, out_channels=nOutChannels)
-        self.conv2 = conv3x3(in_channels=nChannels, out_channels=nOutChannels)
-        self.conv3 = conv3x3(in_channels=nChannels, out_channels=nOutChannels)
-        self.conv4 = conv1x1(in_channels=nChannels, out_channels=nOutChannels)
+        self.conv1 = conv3x3(nChannels=nChannels, nOutChannels=nOutChannels)
+        self.conv2 = conv3x3(nChannels=nOutChannels, nOutChannels=nOutChannels)
+        self.conv3 = conv3x3(nChannels=nOutChannels, nOutChannels=nOutChannels)
+        self.conv4 = conv1x1(nChannels=nOutChannels, nOutChannels=nOutChannels)
 
 
     def forward(self, x):
@@ -71,25 +73,38 @@ class DenseNet(nn.Module):
     def __init__(self, nClasses):
         super().__init__()
 
-        self.dense1 = Denseblock(in_channels=3, out_channels=64)
-        self.dense2 = Denseblock(in_channels=64, out_channels=64)
-        self.dense3 = Denseblock(in_channels=64, out_channels=64)
-        self.dense4 = Denseblock(in_channels=64, out_channels=64)
+        self.dense1 = Denseblock(nChannels=1, nOutChannels=64)
+        self.dense2 = Denseblock(nChannels=64, nOutChannels=64)
+        self.dense3 = Denseblock(nChannels=64, nOutChannels=64)
+        self.dense4 = Denseblock(nChannels=64, nOutChannels=64)
         # self.dense5 = Denseblock(in_channels=3, out_channels=64)
 
-        self.bn = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
         self.fc = nn.Linear(64, nClasses)
         self.gap = nn.AdaptiveAvgPool2d(1)
 
+        self.conv128 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding=1, bias=False)
+        self.conv192 = nn.Conv2d(in_channels=192, out_channels=64, kernel_size=3, padding=1, bias=False)
 
     def forward(self, x):
         x1 = self.dense1(x)
-        x2 = self.dense2(torch.concat((x1, x), 1))
-        x3 = self.dense3(torch.concat((x2, x1, x), 1))
-        x4 = self.dense4(torch.concat((x3, x2, x1, x), 1))
+        x2 = self.dense2(x1)
+
+        cc = torch.concat((x2, x1), 1)
+        x3 = self.conv128(cc)
+        x3 = self.dense3(x3)
+
+        cc = torch.concat((x3, x2, x1), 1)
+        x4 = self.conv192(cc)
+        x4 = self.dense4(x4)
 
         out = self.gap(x4)
+        out = torch.squeeze(out)
         out = F.log_softmax(self.fc(out))
 
         return out
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+net = DenseNet(nClasses=47).to(device)
+
+#torchsummary.summary(net, (3, 224, 224))

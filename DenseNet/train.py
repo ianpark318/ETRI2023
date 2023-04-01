@@ -1,192 +1,103 @@
 import torch
-
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 import torchvision.transforms as transforms
-
-from torch.utils.data import DataLoader
-
+from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader, random_split
+from densenet import DenseNet
 import argparse
+from dataset import MFCCdataset, RPdataset
+import numpy as np
 
 import os
 
 import shutil
 
-import setproctitle
-
-import model
-# import make_graph
-
-parser = argparse.ArgumentParser(description="Train the DenseNet")
-
-parser.add_argument('--num_epoch', default=300, type=int)
-parser.add_argument('--start-epoch', default=0, type=int)
-parser.add_argument('--batch_size', default=64, type=int)
-parser.add_argument('--lr', default=0.1, type=float)
-parser.add_argument('--momentum', default=0.9, type=float)
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float)
-parser.add_argument('--print-freq', '-p', default=10, type=int)
-parser.add_argument('--layers', default=100, type=int)
-parser.add_argument('no-cuda', action='store_true')
-parser.add_argument('--save')
-parser.add_argument('--seed', default=1, type=int)
-parser.add_argument('--opt', default='adam', type=str,
-                    choices=('sgd', 'adam', 'rmsprop'))
-
-# number of new channels per layer
-parser.add_argument('--growth', default=12, type=int)
-# dropout probability
-parser.add_argument('--droprate', default=0, type=float)
-# whether to use standard augmentation
-parser.add_argument('--no-augment', dest='augment', action='store_false')
-# compression rate in transition state
-parser.add_argument('--reduce', default=0.5, type=float)
-# to not uset bottlenect block
-parser.add_argument('--no-bottleneck', dest='bottleneck', action='store_false')
-# path to latest checkpoint
-parser.add_argument('--resume', default='', type=str)
-# name of experiment
-parser.add_argument('--name', default='DenseNet_BC_100_12', type=str)
-# Log progress to TensorBoard
-parser.add_argument('--tensorboard', action='store_true')
-
-parser.set_defaults(bottleneck=True)
-parser.set_defaults(augment=True)
-
-best_prec1 = 0
+# import setproctitle
 
 
 def main():
-    args = parser.parse_args()
+    num_epoch = 1000
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    csv_file_mfcc = '../data.csv'
+    csv_file_rp = '../rpdata.csv'
+    model = DenseNet(nClasses=47).cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
-    args.save = args.save or 'work/densenet.base'
-    setproctitle.setproctitle(args.save)
+    dataset = MFCCdataset(csv_file_mfcc)
+    #dataset = RPdataset(csv_file_rp)
+    dataset_size = len(dataset)
+    train_size = int(dataset_size * 0.8)
+    validation_size = int(dataset_size * 0.1)
+    test_size = dataset_size - train_size - validation_size
+    transform = transforms.Compose([transforms.Resize((20, 4)),
+                                    transforms.ToTensor()])
 
-    torch.manual_seed(args.seed)
-    if args.cuda:
-        torch.cuda.manual_seed(args.seed)
+    train_dataset, validation_dataset, test_dataset = random_split(dataset, [train_size, validation_size, test_size])
 
-    if os.path.exists(args.save):
-        shutil.rmtree(args.save)
-    os.makedirs(args.save, exist_ok=True)
+    print(f"Training Data Size : {len(train_dataset)}")
+    print(f"Validation Data Size : {len(validation_dataset)}")
+    print(f"Testing Data Size : {len(test_dataset)}")
+    train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True, drop_last=True)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=4, shuffle=True, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=True, drop_last=True)
 
-    # normMean = [0.49139968, 0.48215827, 0.44653124]
-    # normStd = [0.24703233, 0.24348505, 0.26158768]
-    # normTransform = transforms.Normalize(normMean, normStd)
+    # validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=batch_size, shuffle=False)
 
-    normalize = transforms.Normalize(mean=[x/255.0 for x in [125.3, 123.0, 113.9]],
-                                         std=[x/255.0 for x in [63.0, 62.1, 66.7]])
+    model.train()
+    for epoch in range(num_epoch):
+        print('EPOCH {}:'.format(epoch + 1))
+        training_loss = 0.0
+        for i, data in enumerate(train_dataloader):
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
+            # zero the parameter gradients
+            optimizer.zero_grad()
 
-    trainTransform = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        normalize
-    ])
-    testTransform = transforms.Compose([
-        transforms.ToTensor(),
-        normalize
-    ])
+            # forward + backward + optimize
+            outputs = model(inputs.to(device))
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+            # print statistics
+            training_loss += loss.item()
+            if i % 100 == 99:  # print every 100 mini-batches
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {training_loss / 100:.3f}')
+                training_loss = 0.0
 
-    trainLoader = DataLoader()
-    testLoader = DataLoader()
+            if i % 1000 == 999:
+                # test with validation set if val_loader exist
+                with torch.no_grad():
+                    val_loss = []
+                    for j, val_data in enumerate(validation_dataloader):
+                        val_inputs, val_labels = val_data
+                        val_inputs = val_inputs.to(device)
+                        val_labels = val_labels.to(device)
+                        val_outputs = model(val_inputs)
+                        val_loss.append(criterion(val_outputs, val_labels).item())
+                    print("validation loss {}".format(np.mean(val_loss)))
 
-    net = model.DensNet(growthRate=args.growth, depth=100, reduction=args.reduce,
-                        bottleneck=args.bottleneck, nClasses=10)
+    print('Finished Training')
+    PATH = './MFCC_densenet.pth'
+    #PATH = './RP_densenet.pth'
+    torch.save(model.state_dict(), PATH)
 
-    print(f' + Number of params: {sum([p.data.nelement() for p in net.parameters()])}')
-
-    if args.cuda:
-        net = net.cuda()
-
-    if args.opt == 'sgd':
-        optimizer = optim.SGD(net.parameters(), lr=1e-1,
-                              momentum=0.9, weight_decay=1e-4)
-    elif args.opt == 'adam':
-        optimizer = optim.Adam(net.parameters(), weight_decay=1e-4)
-    elif args.opt == 'rmsprop':
-        optimizer = optim.RMSprop(net.parameters(), weight_decay=1e-4)
-
-    trainF = open(os.path.join(args.save, 'train.csv'), 'w')
-    testF = open(os.path.join(args.save, 'test.csv'), 'w')
-
-    for epoch in range(1, args.nEpochs + 1):
-        adjust_opt(args.opt, optimizer, epoch)
-        train(args, epoch, net, trainLoader, optimizer, trainF)
-        test(args, epoch, net, testLoader, optimizer, testF)
-        torch.save(net, os.path.join(args.save, 'latest.pth'))
-        os.system('./plot.py {} &'.format(args.save))
-
-    trainF.close()
-    testF.close()
-
-
-def train(args, epoch, net, trainLoader, optimizer, trainF):
-    net.train()
-    nProcessed = 0
-    nTrain = len(trainLoader.dataset)
-    for batch_idx, (data, target) in enumerate(trainLoader):
-        if args.cuda:
-            data, target = data.cuda(), target.cuda()
-        data, target = Variable(data), Variable(target)
-        optimizer.zero_grad()
-        output = net(data)
-        loss = F.nll_loss(output, target)
-        # make_graph.save('/tmp/t.dot', loss.creator); assert(False)
-        loss.backward()
-        optimizer.step()
-        nProcessed += len(data)
-        pred = output.data.max(1)[1]  # get the index of the max log-probability
-        incorrect = pred.ne(target.data).cpu().sum()
-        err = 100. * incorrect / len(data)
-        partialEpoch = epoch + batch_idx / len(trainLoader) - 1
-        print('Train Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tError: {:.6f}'.format(
-            partialEpoch, nProcessed, nTrain, 100. * batch_idx / len(trainLoader),
-            loss.data[0], err))
-
-        trainF.write('{},{},{}\n'.format(partialEpoch, loss.data[0], err))
-        trainF.flush()
-
-
-def test(args, epoch, net, testLoader, optimizer, testF):
-    net.eval()
-    test_loss = 0
-    incorrect = 0
-    for data, target in testLoader:
-        if args.cuda:
-            data, target = data.cuda(), target.cuda()
-        data, target = Variable(data, volatile=True), Variable(target)
-        output = net(data)
-        test_loss += F.nll_loss(output, target).data[0]
-        pred = output.data.max(1)[1]  # get the index of the max log-probability
-        incorrect += pred.ne(target.data).cpu().sum()
-
-    test_loss = test_loss
-    test_loss /= len(testLoader)  # loss function already averages over batch size
-    nTotal = len(testLoader.dataset)
-    err = 100. * incorrect / nTotal
-    print('\nTest set: Average loss: {:.4f}, Error: {}/{} ({:.0f}%)\n'.format(
-        test_loss, incorrect, nTotal, err))
-
-    testF.write('{},{},{}\n'.format(epoch, test_loss, err))
-    testF.flush()
-
-
-def adjust_opt(optAlg, optimizer, epoch):
-    if optAlg == 'sgd':
-        if epoch < 150:
-            lr = 1e-1
-        elif epoch == 150:
-            lr = 1e-2
-        elif epoch == 225:
-            lr = 1e-3
-        else:
-            return
-
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
+    # test
+    with torch.no_grad():
+        test_loss = []
+        for k, test_data in enumerate(test_dataloader):
+            test_inputs, test_labels = test_data
+            test_inputs = test_inputs.to(device)
+            test_labels = test_labels.to(device)
+            test_outputs = model(test_inputs)
+            test_loss.append(criterion(test_outputs, test_labels).item())
+        print("test loss {}".format(np.mean(test_loss)))
 
 
 if __name__ == '__main__':

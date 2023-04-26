@@ -1,124 +1,201 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torchvision.transforms as transforms
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader, random_split
-import argparse
-from dataset import RPdataset, ETdataset, RPnETdataset
-from model import D2GMNet
 import numpy as np
-import tqdm
+import torch.nn as nn
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from sklearn.metrics import f1_score
+import pandas as pd
+from dataset import RPDataset, GpsDataset
+from sklearn.preprocessing import LabelEncoder
+import random
+import albumentations as A
+import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
+from model import BaseModel
+import warnings
 import os
+warnings.filterwarnings('ignore')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-import shutil
+CFG = {
+    'IMG_SIZE':224,
+    'EPOCHS':50,
+    'LEARNING_RATE':3e-4,
+    'BATCH_SIZE':32,
+    'SEED':42
+}
 
-# import setproctitle
+def seed_everything(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
 
-
-def main():
-    num_epoch = 100
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    csv_file_train = '/home/jh/ETRIdata/ETRItrain.csv'
-    csv_file_val = '/home/jh/ETRIdata/ETRIval.csv'
-    csv_file_test = '/home/jh/ETRIdata/ETRItest.csv'
-    model = D2GMNet().to(device)
+seed_everything(CFG['SEED'])
+def train_func(model, optimizer, scheduler, device):
+    model.to(device)
+    #     criterion = FocalLoss().to(device)
     criterion = nn.CrossEntropyLoss().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-2)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[500, 800], gamma=0.5)
 
-    train_dataset1 = RPdataset(csv_file_train)
-    train_dataset2 = ETdataset(csv_file_train)
-    val_dataset1 = RPdataset(csv_file_val)
-    val_dataset2 = ETdataset(csv_file_val)
-    test_dataset1 = RPdataset(csv_file_test)
-    test_dataset2 = ETdataset(csv_file_test)
-    dataset_size = len(train_dataset1)
-    # train_size = int(dataset_size * 0.8)
-    # validation_size = int(dataset_size * 0.1)
-    # test_size = dataset_size - train_size - validation_size
-    # transform = transforms.Compose([transforms.Resize((20, 4)),
-    #                                 transforms.ToTensor()])
+    best_val_score = 0
+    best_model = None
 
-    # train_dataset, validation_dataset, test_dataset = random_split(dataset, [train_size, validation_size, test_size])
+    for epoch in range(1, CFG['EPOCHS'] + 1):
+        model.train()
+        train_loss = []
 
-    # print(f"Training Data Size : {len(train_dataset1)}")
-    # print(f"Validation Data Size : {len(validation_dataset)}")
-    # print(f"Testing Data Size : {len(test_dataset)}")
-    train_dataloader1 = DataLoader(train_dataset1, batch_size=16, shuffle=True, drop_last=True)
-    train_dataloader2 = DataLoader(train_dataset2, batch_size=16, shuffle=True, drop_last=True)
-    val_dataloader1 = DataLoader(val_dataset1, batch_size=4, shuffle=True, drop_last=True)
-    val_dataloader2 = DataLoader(val_dataset2, batch_size=4, shuffle=True, drop_last=True)
-    test_dataloader1 = DataLoader(test_dataset1, batch_size=4, shuffle=True, drop_last=True)
-    test_dataloader2 = DataLoader(test_dataset2, batch_size=4, shuffle=True, drop_last=True)
+        val_loss = []
+        preds, trues = [], []
 
-    # validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=batch_size, shuffle=False)
-
-    model.train()
-    for epoch in range(num_epoch):
-        print('EPOCH {}:'.format(epoch + 1))
-        training_loss = 0.0
-        for i, data in tqdm.tqdm(enumerate(zip(train_dataloader1, train_dataloader2))):
-            # get the inputs; data is a list of [inputs, labels]
+        for i, data in enumerate(zip(tqdm(RP_train_loader), Gps_train_loader)):
             data1, data2 = data
-            rp, labels = data1
-            et, _ = data2
-            # rp, et = inputs[0], inputs[1]
-            rp = rp.to(device)
-            et = et.to(device)
+            images, labels = data1
+            gps, _ = data2
+
+            images = images.to(device)
+            gps = gps.to(device)
             labels = labels.to(device)
 
-            # zero the parameter gradients
             optimizer.zero_grad()
 
-            # forward + backward + optimize
-            outputs = model(rp, et)
-            loss = criterion(outputs, labels)
+            # output = model(images, gps)
+            output = model(images)
+            loss = criterion(output, labels)
+
             loss.backward()
             optimizer.step()
 
-            # print statistics
-            training_loss += loss.item()
-            if i % 100 == 99:  # print every 100 mini-batches
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {training_loss / 100:.3f}')
-                training_loss = 0.0
+            train_loss.append(loss.item())
 
-            if i % 1000 == 999:
-                # test with validation set if val_loader exist
-                with torch.no_grad():
-                    val_loss = []
-                    for j, val_data in enumerate(zip(val_dataloader1, val_dataloader2)):
-                        val_data1, val_data2 = val_data
-                        val_rp, val_labels = val_data1
-                        val_et, _ = val_data2
-                        # val_rp, val_et = val_inputs[0], val_inputs[1]
-                        val_rp = val_rp.to(device)
-                        val_et = val_et.to(device)
-                        val_labels = val_labels.to(device)
-                        val_outputs = model(val_rp, val_et)
-                        val_loss.append(criterion(val_outputs, val_labels).item())
-                    print("validation loss {}".format(np.mean(val_loss)))
-        scheduler.step()
+        model.eval()
 
-    print('Finished Training')
-    PATH = 'DenseNet/MFCC_densenet.pth'
-    #PATH = './RP_densenet.pth'
-    torch.save(model.state_dict(), PATH)
+        with torch.no_grad():
+            for i, data in enumerate(zip(tqdm(RP_val_loader), Gps_val_loader)):
+                data1, data2 = data
+                images, labels = data1
+                gps, _ = data2
 
-    # test
-    # with torch.no_grad():
-    #     test_loss = []
-    #     for k, test_data in enumerate(test_dataloader):
-    #         test_rp, test_et, test_labels = test_data
-    #         # test_rp, test_et = test_inputs[0], test_inputs[1]
-    #         test_rp = test_rp.to(device)
-    #         test_et = test_et.to(device)
-    #         test_labels = test_labels.to(device)
-    #         test_outputs = model(test_rp, test_et)
-    #         test_loss.append(criterion(test_outputs, test_labels).item())
-    #     print("test loss {}".format(np.mean(test_loss)))
+                images = images.to(device)
+                gps = gps.to(device)
+                labels = labels.to(device)
+
+                logit = model(images, gps)
+
+                loss = criterion(logit, labels)
+
+                val_loss.append(loss.item())
+
+                preds += logit.argmax(1).detach().cpu().numpy().tolist()
+                trues += labels.detach().cpu().numpy().tolist()
+
+            _val_loss = np.mean(val_loss)
+
+        _val_score = f1_score(trues, preds, average='micro')
+
+        _train_loss = np.mean(train_loss)
+        print(
+            f'Epoch [{epoch}], Train Loss : [{_train_loss:.5f}] Val Loss : [{_val_loss:.5f}] Val F1 : [{_val_score:.5f}]')
+
+        if scheduler is not None:
+            scheduler.step(_val_score)
+
+        if best_val_score < _val_score:
+            best_val_score = _val_score
+            best_model = model
+
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': _val_loss,
+            }, 'savemodel/0426_model.pth')
 
 
-if __name__ == '__main__':
-    main()
+train_df = pd.read_csv('./train_data.csv', index_col = 0)
+test_df = pd.read_csv('./test_data.csv', index_col = 0)
+le = LabelEncoder()
+le = le.fit(train_df['action'])
+train_df['action'] = le.transform(train_df['action'])
+test_df['action'] = le.transform(test_df['action'])
+
+img_path_list = []
+for i in range(15):
+    path_list = list(train_df[train_df['action']==i]['img_path'])
+    if len(path_list) >= 5000:
+        tmp = random.sample(path_list, 5000)
+        for i in tmp:
+            img_path_list.append(i)
+    else:
+        for i in path_list:
+            img_path_list.append(i)
+df = pd.DataFrame(img_path_list)
+df.columns = ['img_path']
+path_label_df = pd.merge(train_df, df, on='img_path', how='inner')
+
+img_path_list = []
+for i in range(15):
+    path_list = list(test_df[test_df['action']==i]['img_path'])
+    if len(path_list) >= 300:
+        tmp = random.sample(path_list, 300)
+        for i in tmp:
+            img_path_list.append(i)
+    else:
+        for i in path_list:
+            img_path_list.append(i)
+df2 = pd.DataFrame(img_path_list)
+df2.columns = ['img_path']
+path_label_df2 = pd.merge(test_df, df2, on='img_path', how='inner')
+
+train_df = path_label_df
+test_df = path_label_df2
+
+RP_tfms = A.Compose([
+    A.Resize(width=CFG['IMG_SIZE'], height=CFG['IMG_SIZE']),
+    A.Normalize()
+], p=1)
+
+Gps_tfms = A.Compose([
+    A.Resize(width=112, height=112),
+    A.Normalize()
+], p=1)
+
+train, val, _, _ = train_test_split(train_df, train_df['action'], test_size=0.1, random_state=CFG['SEED'], stratify=train_df['action'])
+train['img_path'] = train['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
+val['img_path'] = val['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
+test_df['img_path'] = train_df['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
+
+class FocalLoss(nn.Module):
+    def __init__(self, weight=None, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.weight = weight
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, weight=self.weight, reduction=self.reduction)
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1-pt)**self.gamma * ce_loss).mean()
+        return focal_loss
+
+RP_train_dataset = RPDataset(df=train, rp_path_list=train['img_path'].values, label_list=train['action'].values, tfms=RP_tfms)
+RP_train_loader = DataLoader(RP_train_dataset, batch_size = CFG['BATCH_SIZE'], shuffle=True, num_workers=0)
+
+RP_val_dataset = RPDataset(df=val,rp_path_list=val['img_path'].values, label_list=val['action'].values, tfms=RP_tfms)
+RP_val_loader = DataLoader(RP_val_dataset, batch_size = CFG['BATCH_SIZE'], shuffle=False, num_workers=0)
+
+Gps_train_dataset = GpsDataset(df=train, lat_path_list=train['lat'].values, lon_path_list=train['lon'].values, label_list=train['action'].values, tfms=Gps_tfms)
+Gps_train_loader = DataLoader(Gps_train_dataset, batch_size = CFG['BATCH_SIZE'], shuffle=True, num_workers=0)
+
+Gps_val_dataset = GpsDataset(df=val, lat_path_list=train['lat'].values, lon_path_list=train['lon'].values, label_list=val['action'].values, tfms=Gps_tfms)
+Gps_val_loader = DataLoader(Gps_val_dataset, batch_size = CFG['BATCH_SIZE'], shuffle=False, num_workers=0)
+
+_model = BaseModel(15)
+_model = _model.to(device)
+_model.eval()
+_optimizer = torch.optim.Adam(params = _model.parameters(), lr = CFG["LEARNING_RATE"])
+_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(_optimizer, mode='max', factor=0.5, patience=2,threshold_mode='abs',min_lr=1e-8, verbose=True)
+
+train_func(_model, _optimizer, _scheduler, device)

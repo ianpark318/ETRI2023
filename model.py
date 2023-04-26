@@ -2,21 +2,10 @@ import torch
 
 import torch.nn as nn
 import torch.optim as optim
-
+import torchvision.models as models
 import torch.nn.functional as F
 from torch.autograd import Variable
-
-# import torchvision.datasets as dset
-# import torchvision.transforms as transforms
-# from torch.utils.data import DataLoader
-
-# import torchvision.models as models
-
-import sys
 import math
-
-import torchsummary
-
 
 class Bottleneck(nn.Module):
     def __init__(self, nChannels, growthRate):
@@ -316,3 +305,16 @@ class D2GMNet(nn.Module):
         output = self.fc5(output)
         output = F.softmax(output, dim=1)
         return output
+
+class BaseModel(nn.Module):
+    def __init__(self, num_classes):
+        super(BaseModel, self).__init__()
+        self.backbone = models.efficientnet_b0(pretrained=True)
+        self.fc1 = nn.Linear(1000, 256)
+        self.fc2 = nn.Linear(256, num_classes)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x

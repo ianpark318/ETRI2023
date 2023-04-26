@@ -19,8 +19,8 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 
 CFG = {
     'IMG_SIZE':224,
-    'EPOCHS':50,
-    'LEARNING_RATE':3e-4,
+    'EPOCHS':30,
+    'LEARNING_RATE':1e-3,
     'BATCH_SIZE':32,
     'SEED':42
 }
@@ -82,7 +82,7 @@ def train_func(model, optimizer, scheduler, device):
                 gps = gps.to(device)
                 labels = labels.to(device)
 
-                logit = model(images, gps)
+                logit = model(images)
 
                 loss = criterion(logit, labels)
 
@@ -106,51 +106,46 @@ def train_func(model, optimizer, scheduler, device):
             best_val_score = _val_score
             best_model = model
 
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': _val_loss,
-            }, 'savemodel/0426_model.pth')
+            torch.save(model, 'save_model/0426_eff.pth')
 
 
-train_df = pd.read_csv('./train_data.csv', index_col = 0)
-test_df = pd.read_csv('./test_data.csv', index_col = 0)
-le = LabelEncoder()
-le = le.fit(train_df['action'])
-train_df['action'] = le.transform(train_df['action'])
-test_df['action'] = le.transform(test_df['action'])
-
-img_path_list = []
-for i in range(15):
-    path_list = list(train_df[train_df['action']==i]['img_path'])
-    if len(path_list) >= 5000:
-        tmp = random.sample(path_list, 5000)
-        for i in tmp:
-            img_path_list.append(i)
-    else:
-        for i in path_list:
-            img_path_list.append(i)
-df = pd.DataFrame(img_path_list)
-df.columns = ['img_path']
-path_label_df = pd.merge(train_df, df, on='img_path', how='inner')
-
-img_path_list = []
-for i in range(15):
-    path_list = list(test_df[test_df['action']==i]['img_path'])
-    if len(path_list) >= 300:
-        tmp = random.sample(path_list, 300)
-        for i in tmp:
-            img_path_list.append(i)
-    else:
-        for i in path_list:
-            img_path_list.append(i)
-df2 = pd.DataFrame(img_path_list)
-df2.columns = ['img_path']
-path_label_df2 = pd.merge(test_df, df2, on='img_path', how='inner')
-
-train_df = path_label_df
-test_df = path_label_df2
+train_df = pd.read_csv('./tiny_train_data.csv', index_col = 0)
+test_df = pd.read_csv('./tiny_test_data.csv', index_col = 0)
+# le = LabelEncoder()
+# le = le.fit(train_df['action'])
+# train_df['action'] = le.transform(train_df['action'])
+# test_df['action'] = le.transform(test_df['action'])
+# #
+# img_path_list = []
+# for i in range(15):
+#     path_list = list(train_df[train_df['action']==i]['img_path'])
+#     if len(path_list) >= 5000:
+#         tmp = random.sample(path_list, 5000)
+#         for i in tmp:
+#             img_path_list.append(i)
+#     else:
+#         for i in path_list:
+#             img_path_list.append(i)
+# df = pd.DataFrame(img_path_list)
+# df.columns = ['img_path']
+# path_label_df = pd.merge(train_df, df, on='img_path', how='inner')
+#
+# img_path_list = []
+# for i in range(15):
+#     path_list = list(test_df[test_df['action']==i]['img_path'])
+#     if len(path_list) >= 300:
+#         tmp = random.sample(path_list, 300)
+#         for i in tmp:
+#             img_path_list.append(i)
+#     else:
+#         for i in path_list:
+#             img_path_list.append(i)
+# df2 = pd.DataFrame(img_path_list)
+# df2.columns = ['img_path']
+# path_label_df2 = pd.merge(test_df, df2, on='img_path', how='inner')
+#
+# train_df = path_label_df
+# test_df = path_label_df2
 
 RP_tfms = A.Compose([
     A.Resize(width=CFG['IMG_SIZE'], height=CFG['IMG_SIZE']),
@@ -165,7 +160,7 @@ Gps_tfms = A.Compose([
 train, val, _, _ = train_test_split(train_df, train_df['action'], test_size=0.1, random_state=CFG['SEED'], stratify=train_df['action'])
 train['img_path'] = train['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
 val['img_path'] = val['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
-test_df['img_path'] = train_df['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
+# test_df['img_path'] = test_df['img_path'].apply(lambda x : x.replace('./ETRI_data_RP_png', '../ETRIdata'))
 
 class FocalLoss(nn.Module):
     def __init__(self, weight=None, gamma=2, reduction='mean'):
